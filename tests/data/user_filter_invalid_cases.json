@@ -1,0 +1,18 @@
+[
+  {
+    "id": "invalid-role",
+    "query_params": {
+      "role": "manager"
+    },
+    "expected_status": 422,
+    "invalid_field": "role"
+  },
+  {
+    "id": "empty-keyword",
+    "query_params": {
+      "keyword": ""
+    },
+    "expected_status": 422,
+    "invalid_field": "keyword"
+  }
+]
