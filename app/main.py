@@ -1,6 +1,8 @@
 from typing import Annotated
+from pathlib import Path as FilePath
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Response, Security, status
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.schemas import (
@@ -28,6 +30,13 @@ app = FastAPI(
 )
 store = UserStore()
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+@app.get("/", include_in_schema=False)
+def web_home() -> FileResponse:
+    """返回 UI 自动化练习用的用户管理页面。"""
+    page_path = FilePath(__file__).parent / "static" / "index.html"
+    return FileResponse(page_path)
 
 
 def to_user_response(user: StoredUser) -> UserResponse:

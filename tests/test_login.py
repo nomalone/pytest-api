@@ -8,7 +8,6 @@ LOGIN_INVALID_CASES = {case["id"]: case for case in load_json_cases("login_inval
 
 @allure.feature("登录模块")
 class TestLogin:
-
     @allure.title("登陆成功")
     @pytest.mark.smoke
     def test_login_success(self,  api_client):

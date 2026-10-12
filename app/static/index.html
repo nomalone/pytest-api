@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>用户管理 | pytest UI Demo</title>
+  <style>
+    :root { color-scheme: light; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; color: #182230; background: #f3f6fb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 40px 18px; }
+    main { max-width: 860px; margin: 0 auto; }
+    .card { padding: 28px; margin-bottom: 20px; border: 1px solid #e1e7f0; border-radius: 14px; background: white; box-shadow: 0 8px 24px #1b31500c; }
+    h1, h2 { margin-top: 0; }
+    h1 { font-size: 26px; }
+    h2 { font-size: 20px; }
+    .muted { color: #667085; }
+    form { display: grid; gap: 14px; }
+    label { display: grid; gap: 6px; font-weight: 600; }
+    input, select, button { min-height: 42px; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
+    input:focus, select:focus { outline: 3px solid #bfdbfe; border-color: #2563eb; }
+    button { border: 0; color: white; background: #2563eb; font-weight: 650; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    button.secondary { color: #344054; background: #eef2f7; }
+    .toolbar { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
+    .toolbar label { flex: 1 1 220px; }
+    .toolbar button { min-width: 100px; }
+    .topline { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .message { min-height: 24px; margin-bottom: 0; }
+    .error { color: #b42318; }
+    .success { color: #067647; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th, td { padding: 12px 10px; border-bottom: 1px solid #eaecf0; }
+    th { color: #475467; font-size: 14px; }
+    [hidden] { display: none !important; }
+    @media (max-width: 560px) { body { padding: 20px 12px; } .card { padding: 20px; } .topline { align-items: flex-start; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="card">
+      <h1>用户管理</h1>
+      <p class="muted">pytest + Playwright UI 自动化练习页面</p>
+    </header>
+
+    <section class="card" id="login-panel" aria-labelledby="login-heading">
+      <h2 id="login-heading">登录</h2>
+      <p class="muted">练习账号：tester / test123</p>
+      <form id="login-form">
+        <label for="username">用户名
+          <input id="username" name="username" autocomplete="username" value="tester" required>
+        </label>
+        <label for="password">密码
+          <input id="password" name="password" type="password" autocomplete="current-password" value="test123" required>
+        </label>
+        <button type="submit">登录</button>
+      </form>
+      <p id="login-message" class="message" role="alert" aria-live="polite"></p>
+    </section>
+
+    <section class="card" id="users-panel" aria-labelledby="users-heading" hidden>
+      <div class="topline">
+        <div>
+          <h2 id="users-heading">用户列表</h2>
+          <p id="login-status" class="muted"></p>
+        </div>
+        <button id="logout-button" class="secondary" type="button">退出登录</button>
+      </div>
+
+      <form id="filter-form" class="toolbar">
+        <label for="keyword">关键词
+          <input id="keyword" name="keyword" placeholder="用户名、姓名或邮箱">
+        </label>
+        <label for="role">角色
+          <select id="role" name="role">
+            <option value="">全部角色</option>
+            <option value="admin">管理员</option>
+            <option value="user">普通用户</option>
+          </select>
+        </label>
+        <button type="submit">查询</button>
+      </form>
+
+      <p id="users-message" class="message" role="status" aria-live="polite"></p>
+      <div class="table-wrap">
+        <table aria-label="用户列表">
+          <thead>
+            <tr><th>ID</th><th>用户名</th><th>姓名</th><th>邮箱</th><th>角色</th></tr>
+          </thead>
+          <tbody id="users-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const loginPanel = document.querySelector("#login-panel");
+    const usersPanel = document.querySelector("#users-panel");
+    const loginForm = document.querySelector("#login-form");
+    const loginMessage = document.querySelector("#login-message");
+    const usersMessage = document.querySelector("#users-message");
+    const usersBody = document.querySelector("#users-body");
+    let accessToken = null;
+
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      loginMessage.textContent = "";
+      const formData = new FormData(loginForm);
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: formData.get("username"),
+          password: formData.get("password"),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        loginMessage.textContent = result.detail || "登录失败";
+        return;
+      }
+
+      accessToken = result.access_token;
+      loginPanel.hidden = true;
+      usersPanel.hidden = false;
+      document.querySelector("#login-status").textContent = `当前用户：${result.user.display_name}`;
+      await loadUsers();
+    });
+
+    document.querySelector("#filter-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await loadUsers();
+    });
+
+    document.querySelector("#logout-button").addEventListener("click", () => {
+      accessToken = null;
+      usersPanel.hidden = true;
+      loginPanel.hidden = false;
+      usersBody.replaceChildren();
+      usersMessage.textContent = "";
+      loginMessage.textContent = "已退出登录";
+    });
+
+    async function loadUsers() {
+      usersMessage.textContent = "正在加载用户…";
+      const params = new URLSearchParams();
+      const keyword = document.querySelector("#keyword").value.trim();
+      const role = document.querySelector("#role").value;
+      if (keyword) params.set("keyword", keyword);
+      if (role) params.set("role", role);
+
+      const query = params.toString();
+      const response = await fetch(`/api/users${query ? `?${query}` : ""}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        usersMessage.textContent = result.detail || "查询用户失败";
+        usersMessage.classList.add("error");
+        return;
+      }
+
+      usersBody.replaceChildren();
+      for (const user of result.items) {
+        const row = document.createElement("tr");
+        const values = [user.id, user.username, user.display_name, user.email,
+          user.role === "admin" ? "管理员" : "普通用户"];
+        for (const value of values) {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          row.append(cell);
+        }
+        usersBody.append(row);
+      }
+      usersMessage.classList.remove("error");
+      usersMessage.classList.add("success");
+      usersMessage.textContent = `共 ${result.total} 个用户`;
+    }
+  </script>
+</body>
+</html>
