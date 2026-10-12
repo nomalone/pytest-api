@@ -42,11 +42,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Install Playwright Chromium
-        run: python -m playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        run: python -m playwright install --with-deps chromium firefox
 
       - name: Run pytest
-        run: python -m pytest
+        run: python -m pytest --browser chromium --browser firefox
 
       - name: Upload Playwright test results
         if: always()
