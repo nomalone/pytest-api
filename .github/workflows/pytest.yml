@@ -1,4 +1,4 @@
-name: pytest API CI
+name: pytest API and UI CI
 
 on:
   push:
@@ -22,6 +22,82 @@ jobs:
           cache: "pip"
           cache-dependency-path: requirements.txt
 
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run API tests
+        run: python -m pytest tests/api
+      #上传原始结果是为了后续下载汇总
+      - name: Upload API Allure results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: allure-results-api
+          path: allure-results
+          if-no-files-found: warn
+          retention-days: 7
+
+  ui-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # 要替换的变量和值
+      matrix:
+        browser: [ chromium, firefox ]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Install Playwright browser
+        run: python -m playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run UI tests
+        run: python -m pytest tests/ui --browser ${{ matrix.browser }}
+
+      - name: Upload Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-test-results-${{ matrix.browser }}
+          path: test-results
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: allure-results-${{ matrix.browser }}
+          path: allure-results
+          if-no-files-found: warn
+          retention-days: 7
+
+  allure-report:
+    needs: [api-tests, ui-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Allure results
+        uses: actions/download-artifact@v5
+        with:
+          pattern: allure-results-*
+          path: allure-results
+          merge-multiple: true
 
       - name: Set up Java
         uses: actions/setup-java@v6
@@ -37,47 +113,24 @@ jobs:
       - name: Install Allure CLI
         run: npm install --global allure-commandline@2.46.1
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-
-      - name: Install Playwright browsers
-        run: python -m playwright install --with-deps chromium firefox
-
-      - name: Run pytest
-        run: python -m pytest --browser chromium --browser firefox
-
-      - name: Upload Playwright test results
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-test-results
-          path: test-results
-          if-no-files-found: warn
-          retention-days: 7
-
-      #生成测试报告
       - name: Generate Allure report
-        if: always()
         run: allure generate allure-results -o allure-report --clean
-      #把报告作为名为allure-report的做下载附件，保存到actions记录中
+
       - name: Upload Allure report
-        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: allure-report
           path: allure-report
           if-no-files-found: warn
-      #把报告打包成Pages部署可识别的artifact
+
       - name: Upload pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
           path: allure-report/
 
   deploy-report:
-    #api-tests完成后进行下面的，并且需要api-tests执行成功才会执行
-    needs: api-tests
+    # API和UI测试、报告生成全部完成后再部署
+    needs: [api-tests, ui-tests, allure-report]
     #触发部署任务条件
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
